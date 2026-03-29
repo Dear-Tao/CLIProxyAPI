@@ -1,6 +1,15 @@
-FROM golang:1.26-alpine AS builder
+ARG GO_IMAGE=golang:1.26-alpine
+ARG RUNTIME_IMAGE=alpine:3.22.0
+
+FROM ${GO_IMAGE} AS builder
 
 WORKDIR /app
+
+ARG GOPROXY=https://proxy.golang.org,direct
+ARG GOSUMDB=sum.golang.org
+
+ENV GOPROXY=${GOPROXY}
+ENV GOSUMDB=${GOSUMDB}
 
 COPY go.mod go.sum ./
 
@@ -14,7 +23,7 @@ ARG BUILD_DATE=unknown
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.Commit=${COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" -o ./CLIProxyAPI ./cmd/server/
 
-FROM alpine:3.22.0
+FROM ${RUNTIME_IMAGE}
 
 RUN apk add --no-cache tzdata
 
