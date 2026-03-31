@@ -67,6 +67,54 @@ func TestOpenAICompatExecutor_AutoUsesResponsesEndpointForResponsesRequests(t *t
 	}
 }
 
+func TestOpenAICompatExecutor_DefaultModeKeepsLegacyChatCompletionsRouting(t *testing.T) {
+	var gotPath string
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl_1","object":"chat.completion","created":1,"model":"gpt-5","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}`))
+	}))
+	defer server.Close()
+
+	executor := NewOpenAICompatExecutor("openrouter", &config.Config{
+		OpenAICompatibility: []config.OpenAICompatibility{{
+			Name:    "openrouter",
+			BaseURL: server.URL + "/v1",
+		}},
+	})
+	auth := &cliproxyauth.Auth{
+		Provider: "openai-compatibility",
+		Attributes: map[string]string{
+			"base_url":     server.URL + "/v1",
+			"api_key":      "test",
+			"compat_name":  "openrouter",
+			"provider_key": "openrouter",
+		},
+	}
+	payload := []byte(`{"model":"gpt-5","input":[{"role":"user","content":"hi"}]}`)
+
+	resp, err := executor.Execute(context.Background(), auth, cliproxyexecutor.Request{
+		Model:   "gpt-5",
+		Payload: payload,
+	}, cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FormatOpenAIResponse,
+	})
+	if err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if gotPath != "/v1/chat/completions" {
+		t.Fatalf("path = %q, want %q", gotPath, "/v1/chat/completions")
+	}
+	if !gjson.GetBytes(gotBody, "messages").Exists() {
+		t.Fatalf("expected legacy chat completions payload to include messages")
+	}
+	if gotObject := gjson.GetBytes(resp.Payload, "object").String(); gotObject != "response" {
+		t.Fatalf("response object = %q, want %q", gotObject, "response")
+	}
+}
+
 func TestOpenAICompatExecutor_ChatCompletionsOverrideTranslatesResponsesRequests(t *testing.T) {
 	var gotPath string
 	var gotBody []byte
@@ -116,6 +164,58 @@ func TestOpenAICompatExecutor_ChatCompletionsOverrideTranslatesResponsesRequests
 	}
 	if gotObject := gjson.GetBytes(resp.Payload, "object").String(); gotObject != "response" {
 		t.Fatalf("response object = %q, want %q", gotObject, "response")
+	}
+}
+
+func TestOpenAICompatExecutor_ResponsesOverrideTranslatesChatRequests(t *testing.T) {
+	var gotPath string
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","object":"response","output":[{"type":"message","id":"msg_1","status":"completed","role":"assistant","content":[{"type":"output_text","text":"ok","annotations":[]}]}],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}`))
+	}))
+	defer server.Close()
+
+	executor := NewOpenAICompatExecutor("openrouter", &config.Config{
+		OpenAICompatibility: []config.OpenAICompatibility{{
+			Name:         "openrouter",
+			BaseURL:      server.URL + "/v1",
+			EndpointMode: "responses",
+		}},
+	})
+	auth := &cliproxyauth.Auth{
+		Provider: "openai-compatibility",
+		Attributes: map[string]string{
+			"base_url":     server.URL + "/v1",
+			"api_key":      "test",
+			"compat_name":  "openrouter",
+			"provider_key": "openrouter",
+		},
+	}
+	payload := []byte(`{"model":"gpt-5","messages":[{"role":"user","content":"hi"}]}`)
+
+	resp, err := executor.Execute(context.Background(), auth, cliproxyexecutor.Request{
+		Model:   "gpt-5",
+		Payload: payload,
+	}, cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FormatOpenAI,
+	})
+	if err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if gotPath != "/v1/responses" {
+		t.Fatalf("path = %q, want %q", gotPath, "/v1/responses")
+	}
+	if !gjson.GetBytes(gotBody, "input").Exists() {
+		t.Fatalf("expected responses payload to include input")
+	}
+	if gjson.GetBytes(gotBody, "messages").Exists() {
+		t.Fatalf("unexpected chat completions messages field in responses payload")
+	}
+	if gotObject := gjson.GetBytes(resp.Payload, "object").String(); gotObject != "chat.completion" {
+		t.Fatalf("response object = %q, want %q", gotObject, "chat.completion")
 	}
 }
 

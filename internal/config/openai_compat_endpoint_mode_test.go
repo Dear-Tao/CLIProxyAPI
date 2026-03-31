@@ -15,6 +15,11 @@ func TestSanitizeOpenAICompatibility_NormalizesEndpointMode(t *testing.T) {
 				BaseURL:      "https://example.com/v2",
 				EndpointMode: "unexpected",
 			},
+			{
+				Name:         "provider-c",
+				BaseURL:      "https://example.com/v3",
+				EndpointMode: " upstream ",
+			},
 		},
 	}
 
@@ -23,7 +28,10 @@ func TestSanitizeOpenAICompatibility_NormalizesEndpointMode(t *testing.T) {
 	if got := cfg.OpenAICompatibility[0].EndpointMode; got != "responses" {
 		t.Fatalf("endpoint mode = %q, want %q", got, "responses")
 	}
-	if got := cfg.OpenAICompatibility[1].EndpointMode; got != "auto" {
-		t.Fatalf("endpoint mode = %q, want %q", got, "auto")
+	if got := cfg.OpenAICompatibility[1].EndpointMode; got != "" {
+		t.Fatalf("endpoint mode = %q, want empty default mode", got)
+	}
+	if got := cfg.OpenAICompatibility[2].EndpointMode; got != "" {
+		t.Fatalf("endpoint mode = %q, want empty default mode", got)
 	}
 }

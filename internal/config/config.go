@@ -829,14 +829,16 @@ func (cfg *Config) SanitizeOpenAICompatibility() {
 
 func normalizeOpenAICompatibilityEndpointMode(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "auto":
+	case "", "default", "legacy", "provider-default", "upstream":
+		return ""
+	case "auto":
 		return "auto"
 	case "chat-completions":
 		return "chat-completions"
 	case "responses":
 		return "responses"
 	default:
-		return "auto"
+		return ""
 	}
 }
 

@@ -29,6 +29,7 @@ type OpenAICompatExecutor struct {
 }
 
 const (
+	openAICompatEndpointModeDefault         = ""
 	openAICompatEndpointModeAuto            = "auto"
 	openAICompatEndpointModeChatCompletions = "chat-completions"
 	openAICompatEndpointModeResponses       = "responses"
@@ -421,14 +422,18 @@ func (e *OpenAICompatExecutor) resolveUpstreamEndpoint(auth *cliproxyauth.Auth, 
 	if compat := e.resolveCompatConfig(auth); compat != nil {
 		mode = normalizeOpenAICompatEndpointMode(compat.EndpointMode)
 	}
+	if mode == openAICompatEndpointModeDefault {
+		return openAICompatEndpoint{
+			format: sdktranslator.FormatOpenAI,
+			path:   "/chat/completions",
+		}
+	}
 
 	switch mode {
 	case openAICompatEndpointModeResponses:
-		if from == sdktranslator.FormatOpenAIResponse {
-			return openAICompatEndpoint{
-				format: sdktranslator.FormatOpenAIResponse,
-				path:   "/responses",
-			}
+		return openAICompatEndpoint{
+			format: sdktranslator.FormatOpenAIResponse,
+			path:   "/responses",
 		}
 	case openAICompatEndpointModeAuto:
 		if from == sdktranslator.FormatOpenAIResponse {
@@ -447,14 +452,16 @@ func (e *OpenAICompatExecutor) resolveUpstreamEndpoint(auth *cliproxyauth.Auth, 
 
 func normalizeOpenAICompatEndpointMode(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", openAICompatEndpointModeAuto:
+	case "", "default", "legacy", "provider-default", "upstream":
+		return openAICompatEndpointModeDefault
+	case openAICompatEndpointModeAuto:
 		return openAICompatEndpointModeAuto
 	case openAICompatEndpointModeChatCompletions:
 		return openAICompatEndpointModeChatCompletions
 	case openAICompatEndpointModeResponses:
 		return openAICompatEndpointModeResponses
 	default:
-		return openAICompatEndpointModeAuto
+		return openAICompatEndpointModeDefault
 	}
 }
 
