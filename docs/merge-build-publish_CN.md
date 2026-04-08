@@ -14,8 +14,9 @@
 本次实际结果：
 
 - merge commit：`e3a0bcee`
+- 对齐源库版本：`v6.9.16`
 - 已推送分支：`fork/fix-openai-compat-endpoint-routing`
-- 本地镜像：`cliproxyapi:merge-e3a0bcee`
+- 本地镜像：`cliproxyapi:v6.9.16`
 - 目标镜像仓库：`eceasy/cli-proxy-api`
 
 ## 1. 检查远端和当前分支
@@ -136,17 +137,23 @@ $env:Path += ';C:\Program Files\Docker\Docker\resources\bin'
 docker build -t cliproxyapi:merge-e3a0bcee --build-arg VERSION=merge-e3a0bcee --build-arg COMMIT=e3a0bcee --build-arg BUILD_DATE=2026-04-07T00:00:00Z --build-arg GOPROXY=https://goproxy.cn,direct --build-arg GOSUMDB=sum.golang.google.cn .
 ```
 
-本次实际已成功构建镜像：`cliproxyapi:merge-e3a0bcee`。
+如果版本号要和源库保持一致，建议直接把 `VERSION` 设为源库 tag：`v6.9.16`。
+
+```powershell
+docker build -t cliproxyapi:v6.9.16 --build-arg VERSION=v6.9.16 --build-arg COMMIT=e3a0bcee --build-arg BUILD_DATE=2026-04-07T00:00:00Z --build-arg GOPROXY=https://goproxy.cn,direct --build-arg GOSUMDB=sum.golang.google.cn .
+```
+
+本次实际已成功构建镜像；后续建议统一使用版本标签：`cliproxyapi:v6.9.16`。
 
 ## 11. 推送 Docker 镜像
 
 仓库工作流默认目标：`eceasy/cli-proxy-api`
 
 ```powershell
-docker tag cliproxyapi:merge-e3a0bcee eceasy/cli-proxy-api:merge-e3a0bcee
+docker tag cliproxyapi:v6.9.16 eceasy/cli-proxy-api:v6.9.16
 Remove-Item Env:HTTP_PROXY,Env:HTTPS_PROXY,Env:ALL_PROXY,Env:GIT_HTTP_PROXY,Env:GIT_HTTPS_PROXY -ErrorAction SilentlyContinue
 $env:Path += ';C:\Program Files\Docker\Docker\resources\bin'
-docker push eceasy/cli-proxy-api:merge-e3a0bcee
+docker push eceasy/cli-proxy-api:v6.9.16
 ```
 
 ## 12. 本次镜像推送失败原因
