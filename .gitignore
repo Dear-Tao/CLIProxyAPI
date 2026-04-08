@@ -27,6 +27,7 @@ auths/*
 
 # Documentation
 docs/*
+!docs/merge-build-publish_CN.md
 AGENTS.md
 CLAUDE.md
 GEMINI.md
