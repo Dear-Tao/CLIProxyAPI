@@ -17,7 +17,8 @@
 - 对齐源库版本：`v6.9.16`
 - 已推送分支：`fork/fix-openai-compat-endpoint-routing`
 - 本地镜像：`cliproxyapi:v6.9.16`
-- 目标镜像仓库：`eceasy/cli-proxy-api`
+- 最终推送镜像：`liming233/cliproxyapi:latest`
+- 最终镜像 digest：`sha256:153e5bfa7af3b4183ad5c205d39da18bfe0fb00061a6f497746f82cb2737fad3`
 
 ## 1. 检查远端和当前分支
 
@@ -145,7 +146,123 @@ docker build -t cliproxyapi:v6.9.16 --build-arg VERSION=v6.9.16 --build-arg COMM
 
 本次实际已成功构建镜像；后续建议统一使用版本标签：`cliproxyapi:v6.9.16`。
 
-## 11. 推送 Docker 镜像
+## 11. 先确认当前 latest 是否还是旧镜像
+
+在覆盖推送前，先直接运行当前 `latest` 镜像检查版本：
+
+```powershell
+$env:Path += ';C:\Program Files\Docker\Docker\resources\bin'
+docker run --rm --entrypoint /bin/sh liming233/cliproxyapi:latest -c "./CLIProxyAPI"
+```
+
+本次实际检查结果是旧镜像：
+
+```text
+CLIProxyAPI Version: v6.9.7, Commit: ddbeb2a4, BuiltAt: 2026-03-31T03:52:28Z
+```
+
+这一步非常重要，可以避免把旧镜像误认成最新版本。
+
+## 12. 如果基础镜像丢失，先补拉 builder 基础镜像
+
+本次在重新构建时发现本地缺少：
+
+- `golang:1.26-alpine`
+- `alpine:3.22.0`
+
+先检查：
+
+```powershell
+$env:Path += ';C:\Program Files\Docker\Docker\resources\bin'
+docker image inspect golang:1.26-alpine
+docker image inspect alpine:3.22.0
+```
+
+如果不存在，先补拉：
+
+```powershell
+Remove-Item Env:HTTP_PROXY,Env:HTTPS_PROXY,Env:ALL_PROXY,Env:GIT_HTTP_PROXY,Env:GIT_HTTPS_PROXY -ErrorAction SilentlyContinue
+$env:Path += ';C:\Program Files\Docker\Docker\resources\bin'
+docker pull golang:1.26-alpine
+docker pull alpine:3.22.0
+```
+
+## 13. 重新构建最新版镜像
+
+这次最终成功的重建命令是：
+
+```powershell
+Remove-Item Env:HTTP_PROXY,Env:HTTPS_PROXY,Env:ALL_PROXY,Env:GIT_HTTP_PROXY,Env:GIT_HTTPS_PROXY -ErrorAction SilentlyContinue
+$env:Path += ';C:\Program Files\Docker\Docker\resources\bin'
+docker build -t cliproxyapi:v6.9.16 --build-arg VERSION=v6.9.16 --build-arg COMMIT=f3d3e8f1 --build-arg BUILD_DATE=2026-04-08T00:00:00Z --build-arg GOPROXY=https://goproxy.cn,direct --build-arg GOSUMDB=sum.golang.google.cn .
+```
+
+## 14. 推送前验证新镜像版本号
+
+推送前必须直接跑一次新镜像，确认它确实是最新版本：
+
+```powershell
+$env:Path += ';C:\Program Files\Docker\Docker\resources\bin'
+docker run --rm --entrypoint /bin/sh cliproxyapi:v6.9.16 -c "./CLIProxyAPI"
+```
+
+本次实际输出：
+
+```text
+CLIProxyAPI Version: v6.9.16, Commit: f3d3e8f1, BuiltAt: 2026-04-08T00:00:00Z
+```
+
+虽然随后会因为没有 `config.yaml` 报错退出，但只要版本横幅正确，这个镜像就是最新包。
+
+## 15. 推送 Docker 镜像
+
+如果只推自己的仓库，并统一覆盖 `latest`，用这组命令：
+
+```powershell
+Remove-Item Env:HTTP_PROXY,Env:HTTPS_PROXY,Env:ALL_PROXY,Env:GIT_HTTP_PROXY,Env:GIT_HTTPS_PROXY -ErrorAction SilentlyContinue
+$env:Path += ';C:\Program Files\Docker\Docker\resources\bin'
+docker tag cliproxyapi:v6.9.16 liming233/cliproxyapi:latest
+docker push liming233/cliproxyapi:latest
+```
+
+本次实际推送成功结果：
+
+```text
+latest: digest: sha256:153e5bfa7af3b4183ad5c205d39da18bfe0fb00061a6f497746f82cb2737fad3 size: 856
+```
+
+## 16. 为什么之前会误以为已经推上最新版
+
+本次踩过一个真实坑：
+
+- 旧的 `liming233/cliproxyapi:latest` 本地就已经存在
+- 第一次判断时只看到了 push 输出和本地 tag，没有先跑容器看版本
+- 后来实际运行 `latest` 才发现它还是 `v6.9.7`
+
+下次必须遵守一个顺序：
+
+1. 先运行当前 `latest` 看是否还是旧版本
+2. 重新构建
+3. 再运行新镜像确认版本号
+4. 最后再 push
+
+## 17. 下次最小复用顺序
+
+1. 检查远端和当前分支
+2. `fetch origin --prune --tags`
+3. 如有残留锁文件，删 `.git/index.lock`
+4. `merge origin/main`
+5. 如仍是那两个 `Responses` 文件冲突，直接 `checkout --theirs`
+6. `add` 后 `commit --no-edit`
+7. `push fork 当前分支`
+8. 清理坏代理变量
+9. 启动 Docker Desktop
+10. 先运行当前 `liming233/cliproxyapi:latest` 检查是不是旧镜像
+11. 如本地缺少 builder 基础镜像，先 `docker pull golang:1.26-alpine` 和 `docker pull alpine:3.22.0`
+12. 重新构建 `cliproxyapi:v6.9.16`
+13. 运行新镜像确认版本号是 `v6.9.16` 和最新 commit
+14. `docker tag cliproxyapi:v6.9.16 liming233/cliproxyapi:latest`
+15. `docker push liming233/cliproxyapi:latest`
 
 仓库工作流默认目标：`eceasy/cli-proxy-api`
 
